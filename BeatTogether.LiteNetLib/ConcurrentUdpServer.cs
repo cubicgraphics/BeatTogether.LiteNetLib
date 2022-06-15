@@ -1,4 +1,5 @@
-﻿using NetCoreServer;
+﻿//using NetCoreServer;
+using Serilog;
 using System;
 using System.Collections.Concurrent;
 using System.Net;
@@ -10,6 +11,7 @@ namespace BeatTogether.LiteNetLib
     public class ConcurrentUdpServer : UdpServer
     {
         private readonly SemaphoreSlim _sendSemaphore = new(1);
+        private readonly ILogger _logger = Log.ForContext<ConcurrentUdpServer>();
 
         public ConcurrentUdpServer(
             IPEndPoint endPoint)
@@ -41,6 +43,9 @@ namespace BeatTogether.LiteNetLib
         }
 
         protected virtual void SendImmediate(EndPoint endpoint, ReadOnlySpan<byte> buffer)
-            => base.SendAsync(endpoint, buffer);
+        {
+            bool sent = base.SendAsync(endpoint, buffer);
+            if (!sent) _logger.Debug("Data was not sent");
+        }
     }
 }

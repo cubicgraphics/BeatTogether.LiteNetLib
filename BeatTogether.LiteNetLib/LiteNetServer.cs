@@ -4,7 +4,8 @@ using BeatTogether.LiteNetLib.Delegates;
 using BeatTogether.LiteNetLib.Enums;
 using BeatTogether.LiteNetLib.Headers;
 using Krypton.Buffers;
-using NetCoreServer;
+//using NetCoreServer;
+using Serilog;
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -28,6 +29,8 @@ namespace BeatTogether.LiteNetLib
         private readonly IServiceProvider _serviceProvider;
         private readonly IPacketLayer? _packetLayer;
 
+        private readonly ILogger _logger = Log.ForContext<LiteNetServer>();
+
         public LiteNetServer(
             IPEndPoint endPoint,
             LiteNetConfiguration configuration,
@@ -43,10 +46,15 @@ namespace BeatTogether.LiteNetLib
         }
 
         protected override void OnStarted()
-            => ReceiveAsync();
+        {
+            _logger.Information("LiteNetServer started");
+            ReceiveAsync();
+        }
 
         protected override void OnReceived(EndPoint endPoint, ReadOnlySpan<byte> buffer)
         {
+            //_logger.Debug($"LiteNetServer Received {buffer.Length} bytes data from {endPoint}");
+
             ReceivePacket(endPoint, buffer);
 
             // Important: Receive using thread pool is necessary here to avoid stack overflow with Socket.ReceiveFromAsync() method!
@@ -192,6 +200,7 @@ namespace BeatTogether.LiteNetLib
         /// <param name="time">Time specified by pong</param>
         internal void HandlePong(EndPoint endPoint, int sequence, long time)
         {
+            //_logger.Verbose($"Received Pong from {endPoint}");
             if (_pongTasks.TryRemove(endPoint, out var pongs))
                 if (pongs.TryRemove(sequence, out var task))
                     task.SetResult(time);
@@ -224,7 +233,11 @@ namespace BeatTogether.LiteNetLib
                         Task.Delay(_configuration.TimeoutDelay, timeoutCts.Token).ContinueWith(timeout =>
                         {
                             if (!timeout.IsCanceled)
+                            {
+                                _logger.Warning($"LiteNet Ping Timeout {endPoint}");
+                                _logger.Warning($"Current threads {Process.GetCurrentProcess().Threads.Count}");
                                 Disconnect(endPoint, DisconnectReason.Timeout);
+                            }
                         });
                     });
 
