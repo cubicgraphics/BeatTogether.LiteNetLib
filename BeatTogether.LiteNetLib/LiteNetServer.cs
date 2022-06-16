@@ -48,7 +48,7 @@ namespace BeatTogether.LiteNetLib
         protected override void OnStarted()
         {
             _logger.Information("LiteNetServer started");
-            ReceiveAsync();
+            ReceiveAsync(); // Start Receive thread
         }
 
         protected override void OnReceived(EndPoint endPoint, ReadOnlySpan<byte> buffer)
@@ -57,8 +57,8 @@ namespace BeatTogether.LiteNetLib
 
             ReceivePacket(endPoint, buffer);
 
-            // Important: Receive using thread pool is necessary here to avoid stack overflow with Socket.ReceiveFromAsync() method!
-            ThreadPool.QueueUserWorkItem(o => { ReceiveAsync(); });
+            //// Important: Receive using thread pool is necessary here to avoid stack overflow with Socket.ReceiveFromAsync() method!
+            //ThreadPool.QueueUserWorkItem(o => { ReceiveAsync(); });
         }
 
         private void ReceivePacket(EndPoint endPoint, ReadOnlySpan<byte> buffer)
