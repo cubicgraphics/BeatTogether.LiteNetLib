@@ -430,7 +430,7 @@ namespace BeatTogether.LiteNetLib
         public virtual void ReceiveAsync()
         {
             // Try to receive datagram
-            TryReceive();
+            Task.Factory.StartNew(TryReceive);
         }
 
         /// <summary>
@@ -456,33 +456,40 @@ namespace BeatTogether.LiteNetLib
                 _receiving = true;
                 //while (IsStarted)
                 //{
-                    //Reading data
-                    int size = NativeSocket.RecvFrom(socketHandle, _receiveBuffer.Data, (int)_receiveBuffer.Capacity, addrBuffer, ref addrSize);
-                    string dataStr = "";
-                    foreach(byte recvData in _receiveBuffer.Data)
-                    {
-                        dataStr += recvData.ToString();
-                    }
-                    _logger.Verbose($"Received {size} data from endpoint {new NativeEndPoint(addrBuffer)} with buffer {dataStr}");
-                    if (size == 0)
-                        return;
-                    if (size == -1)
-                    {
-                        SocketError errorCode = NativeSocket.GetSocketError();
-                        _logger.Verbose($"SocketError {errorCode}");
+                //Reading data
 
-                        if (errorCode == SocketError.WouldBlock || errorCode == SocketError.TimedOut) //Linux timeout EAGAIN
-                            return;
-                            //continue;
-                        if (ProcessError(new SocketException((int)errorCode)))
-                            return;
-                        return;
-                        //continue;
-                    }
+                //Socket.ReceiveTimeout = 0;
+                //int size = Socket.ReceiveFrom(_receiveBuffer.Data, 0, (int)_receiveBuffer.Capacity, SocketFlags.None,
+                //    ref _receiveEndpoint);
+                //_logger.Debug($"ReceiveFrom EndPoint {_receiveEndpoint as IPEndPoint}");
 
-                    NativeAddr nativeAddr = new NativeAddr(addrBuffer, addrSize);
-                    if (!_nativeAddrMap.TryGetValue(nativeAddr, out var endPoint))
-                        endPoint = new NativeEndPoint(addrBuffer);
+                int size = NativeSocket.RecvFrom(socketHandle, _receiveBuffer.Data, (int)_receiveBuffer.Capacity, addrBuffer, ref addrSize);
+                //string dataStr = "";
+                //foreach(byte recvData in _receiveBuffer.Data)
+                //{
+                //    dataStr += recvData.ToString() + ";";
+                //}
+                //_logger.Verbose($"Received {size} data from endpoint {new NativeEndPoint(addrBuffer)} with buffer {dataStr}");
+                _logger.Verbose($"Received {size} data from endpoint {new NativeEndPoint(addrBuffer)}");
+                if (size == 0)
+                    return;
+                if (size == -1)
+                {
+                    SocketError errorCode = NativeSocket.GetSocketError();
+                    _logger.Verbose($"SocketError {errorCode}");
+
+                    if (errorCode == SocketError.WouldBlock || errorCode == SocketError.TimedOut) //Linux timeout EAGAIN
+                        return;
+                    //continue;
+                    if (ProcessError(new SocketException((int)errorCode)))
+                        return;
+                    return;
+                    //continue;
+                }
+
+                NativeAddr nativeAddr = new NativeAddr(addrBuffer, addrSize);
+                if (!_nativeAddrMap.TryGetValue(nativeAddr, out var endPoint))
+                    endPoint = new NativeEndPoint(addrBuffer);
 
                 //All ok!
                 //NetDebug.WriteForce($"[R]Received data from {endPoint}, result: {packet.Size}");
@@ -490,12 +497,17 @@ namespace BeatTogether.LiteNetLib
                 //packet = PoolGetPacket(NetConstants.MaxPacketSize);
                 //_receiveEventArg.RemoteEndPoint = endPoint;
                 //_receiveEventArg.SetBuffer(_receiveBuffer.Data, 0, (int)_receiveBuffer.Capacity);
+                _receiveEndpoint = endPoint;
                 OnReceived(endPoint, _receiveBuffer.Data.AsSpan(0, (int)size));
                     //ProcessReceiveFrom(_receiveEventArg);
                 //}
                 //if (!Socket.ReceiveFromAsync(_receiveEventArg))
             }
             catch (ObjectDisposedException) { }
+            catch (SocketException ex)
+            {
+                ProcessError(ex);
+            }
         }
 
         /// <summary>
@@ -554,21 +566,26 @@ namespace BeatTogether.LiteNetLib
 #endif
                     }
                 }
+                //Socket.SendBufferSize = (int)(_sendBuffer.Size);
+                //_logger.Verbose($"Sending {_sendBuffer.Size} bytes data");
+                //var result = Socket.SendTo(_sendBuffer.Data, 0, (int)(_sendBuffer.Size), SocketFlags.None, _sendEndpoint);
+                //_logger.Verbose($"Sent {result} bytes data");
                 var result = NativeSocket.SendTo(Socket.Handle, _sendBuffer.Data, (int)(_sendBuffer.Size), socketAddress, socketAddress.Length);
                 if (result == -1)
                     throw NativeSocket.GetSocketException();
-
+                if (result > 0) _sendBuffer.Clear();
                 //if (!Socket.SendToAsync(_sendEventArg))
                 //_sendEventArg.RemoteEndPoint = _sendEndpoint;
                 //_sendEventArg.SetBuffer(_sendBuffer.Data, 0, (int)(_sendBuffer.Size));
 
                 //ProcessSendTo(_sendEventArg);
                 _sending = false;
-                _logger.Verbose($"´Sent {result}");
-                OnSent(remoteEndPoint, result);
+                //_logger.Verbose($"Sent {result}");
+                OnSent(_sendEndpoint, result);
             }
             catch (SocketException ex)
             {
+                ProcessError(ex);
                 SendError(ex.SocketErrorCode);
             }
             catch (ObjectDisposedException) { }
