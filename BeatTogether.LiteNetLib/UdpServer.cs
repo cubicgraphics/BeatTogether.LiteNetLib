@@ -168,8 +168,9 @@ namespace BeatTogether.LiteNetLib
                 Socket.DualMode = OptionDualMode;
 
             // Setup Socket
-            Socket.ReceiveTimeout = 10000;
+            //Socket.ReceiveTimeout = 10000;
             //Socket.ReceiveTimeout = 500;
+            Socket.ReceiveTimeout = 0;
             Socket.SendTimeout = 500;
             Socket.ReceiveBufferSize = OptionReceiveBufferSize;
             Socket.SendBufferSize = OptionSendBufferSize;
