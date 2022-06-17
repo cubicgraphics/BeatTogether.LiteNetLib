@@ -671,6 +671,7 @@ namespace BeatTogether.LiteNetLib
                 var result = NativeSocket.SendTo(Socket.Handle, _sendBuffer.Data, (int)(_sendBuffer.Size), socketAddress, socketAddress.Length);
                 if (result == -1)
                     throw NativeSocket.GetSocketException();
+                if (result != (int)_sendBuffer.Size) _logger.Verbose($"Sent amount does not match buffer size, sent {result} bytes, buffer had {(int)_sendBuffer.Size} bytes");
                 if (result > 0) _sendBuffer.Clear();
                 //if (!Socket.SendToAsync(_sendEventArg))
                 //_sendEventArg.RemoteEndPoint = _sendEndpoint;
