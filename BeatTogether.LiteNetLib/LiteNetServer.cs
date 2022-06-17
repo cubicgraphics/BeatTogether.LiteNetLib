@@ -10,6 +10,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -48,20 +49,21 @@ namespace BeatTogether.LiteNetLib
         protected override void OnStarted()
         {
             _logger.Information("LiteNetServer started");
-            ReceiveAsync(); // Start Receive thread
+            //ReceiveAsync(); // Start Receive thread
         }
 
+        //protected override void OnReceived(EndPoint endPoint, ReadOnlySpan<byte> buffer)
+        //{
+        //    //_logger.Debug($"LiteNetServer Received {buffer.Length} bytes data from {endPoint}");
+
+        //    ReceivePacket(endPoint, buffer);
+
+        //    //// Important: Receive using thread pool is necessary here to avoid stack overflow with Socket.ReceiveFromAsync() method!
+        //    //ThreadPool.QueueUserWorkItem(o => { ReceiveAsync(); });
+        //}
+
+        //private void ReceivePacket(EndPoint endPoint, ReadOnlySpan<byte> buffer)
         protected override void OnReceived(EndPoint endPoint, ReadOnlySpan<byte> buffer)
-        {
-            //_logger.Debug($"LiteNetServer Received {buffer.Length} bytes data from {endPoint}");
-
-            ReceivePacket(endPoint, buffer);
-
-            //// Important: Receive using thread pool is necessary here to avoid stack overflow with Socket.ReceiveFromAsync() method!
-            //ThreadPool.QueueUserWorkItem(o => { ReceiveAsync(); });
-        }
-
-        private void ReceivePacket(EndPoint endPoint, ReadOnlySpan<byte> buffer)
         {
             if (_packetLayer != null)
             {
@@ -236,6 +238,8 @@ namespace BeatTogether.LiteNetLib
                             {
                                 _logger.Warning($"LiteNet Ping Timeout {endPoint}");
                                 _logger.Warning($"Current threads {Process.GetCurrentProcess().Threads.Count}");
+                                _logger.Warning($"Current connections {IPGlobalProperties.GetIPGlobalProperties().GetUdpIPv4Statistics().UdpListeners}");
+
                                 Disconnect(endPoint, DisconnectReason.Timeout);
                             }
                         });
