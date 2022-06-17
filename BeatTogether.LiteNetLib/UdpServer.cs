@@ -170,7 +170,7 @@ namespace BeatTogether.LiteNetLib
             // Setup Socket
             //Socket.ReceiveTimeout = 10000;
             //Socket.ReceiveTimeout = 500;
-            Socket.ReceiveTimeout = 0;
+            Socket.ReceiveTimeout = 5000;
             Socket.SendTimeout = 500;
             Socket.ReceiveBufferSize = OptionReceiveBufferSize;
             Socket.SendBufferSize = OptionSendBufferSize;
@@ -178,7 +178,7 @@ namespace BeatTogether.LiteNetLib
             // Bind the server socket to the IP endpoint
             Socket.Bind(Endpoint);
             // Refresh the endpoint property based on the actual endpoint created
-            Endpoint = (IPEndPoint)Socket.LocalEndPoint;
+            Endpoint = (IPEndPoint)Socket.LocalEndPoint!;
 
             // Prepare receive endpoint
             _receiveEndpoint = new IPEndPoint((Endpoint.AddressFamily == AddressFamily.InterNetworkV6) ? IPAddress.IPv6Any : IPAddress.Any, 0);
@@ -194,10 +194,15 @@ namespace BeatTogether.LiteNetLib
             DatagramsSent = 0;
             DatagramsReceived = 0;
 
-            //ParameterizedThreadStart ts = ReceiveAsync;
-
             // Update the started flag
             IsStarted = true;
+
+            _threadv4 = new Thread(NativeReceive!)
+            {
+                Name = $"UdpSocketThreadv4({Endpoint.Port})",
+                IsBackground = true
+            };
+            _threadv4.Start(Socket);
 
             // Call the server started handler
             OnStarted();
@@ -308,6 +313,8 @@ namespace BeatTogether.LiteNetLib
         private Buffer _sendBuffer;
         private SocketAsyncEventArgs _sendEventArg;
         [ThreadStatic] private static byte[] _endPointBuffer;
+        // Threads
+        private Thread _threadv4;
 
         /// <summary>
         /// Multicast datagram to the prepared mulicast endpoint (asynchronous)
@@ -435,6 +442,85 @@ namespace BeatTogether.LiteNetLib
             Task.Factory.StartNew(TryReceive);
         }
 
+        private void NativeReceive(object state)
+        {
+            if (_receiving)
+                return;
+
+            if (!IsStarted)
+                return;
+
+            //try
+            //{
+                _receiving = true;
+                Socket socket = (Socket)state;
+                while (IsStarted)
+                {
+                    //if (Socket.Available > 0)
+                    //{
+                        //IntPtr socketHandle = socket.Handle;
+                        byte[] addrBuffer = new byte[NativeSocket.IPv4AddrSize];
+
+                        int addrSize = addrBuffer.Length;
+                        //Async receive with the receive handler
+                        //Reading data
+
+                        //Socket.ReceiveTimeout = 0;
+                        //int size = Socket.ReceiveFrom(_receiveBuffer.Data, 0, (int)_receiveBuffer.Capacity, SocketFlags.None,
+                        //    ref _receiveEndpoint);
+                        //_logger.Debug($"ReceiveFrom EndPoint {_receiveEndpoint as IPEndPoint}");
+
+                        int size = NativeSocket.RecvFrom(socket.Handle, _receiveBuffer.Data, (int)_receiveBuffer.Capacity, addrBuffer, ref addrSize);
+                        ////string dataStr = "";
+                        ////foreach(byte recvData in _receiveBuffer.Data)
+                        ////{
+                        ////    dataStr += recvData.ToString() + ";";
+                        ////}
+                        ////_logger.Verbose($"Received {size} data from endpoint {new NativeEndPoint(addrBuffer)} with buffer {dataStr}");
+                        //_logger.Verbose($"Received {size} bytes data from endpoint {new NativeEndPoint(addrBuffer)}");
+                        if (size == 0)
+                            continue;
+                        if (size == -1)
+                        {
+                            SocketError errorCode = NativeSocket.GetSocketError();
+                            _logger.Verbose($"SocketError {errorCode}");
+
+                            if (errorCode == SocketError.WouldBlock || errorCode == SocketError.TimedOut) //Linux timeout EAGAIN
+                                //return;
+                                continue;
+                            if (ProcessError(new SocketException((int)errorCode)))
+                                return;
+                            //return;
+                            continue;
+                        }
+
+                        NativeAddr nativeAddr = new NativeAddr(addrBuffer, addrSize);
+                        if (!_nativeAddrMap.TryGetValue(nativeAddr, out var endPoint))
+                            endPoint = new NativeEndPoint(addrBuffer);
+
+                        //All ok!
+                        //NetDebug.WriteForce($"[R]Received data from {endPoint}, result: {packet.Size}");
+                        //OnMessageReceived(packet, endPoint);
+                        //packet = PoolGetPacket(NetConstants.MaxPacketSize);
+                        //_receiveEventArg.RemoteEndPoint = endPoint;
+                        //_receiveEventArg.SetBuffer(_receiveBuffer.Data, 0, (int)_receiveBuffer.Capacity);
+                        _receiveEndpoint = endPoint;
+                        OnReceived(_receiveEndpoint, _receiveBuffer.Data.AsSpan(0, (int)size));
+                        //ProcessReceiveFrom(_receiveEventArg);
+                        //}
+                        //if (!Socket.ReceiveFromAsync(_receiveEventArg))
+                    //}
+                    //Thread.Yield();
+                }
+                _receiving = false;
+            //}
+            //catch (ObjectDisposedException) { }
+            //catch (SocketException ex)
+            //{
+            //    ProcessError(ex);
+            //}
+        }
+
         /// <summary>
         /// Try to receive new data
         /// </summary>
@@ -446,13 +532,13 @@ namespace BeatTogether.LiteNetLib
             if (!IsStarted)
                 return;
 
-            try
-            {
+            //try
+            //{
                 _receiving = true;
                 while (IsStarted)
                 {
-                    if (Socket.Available > 0)
-                    {
+                    //if (Socket.Available > 0)
+                    //{
                         IntPtr socketHandle = Socket.Handle;
                         byte[] addrBuffer = new byte[Socket.AddressFamily == AddressFamily.InterNetwork
                             ? NativeSocket.IPv4AddrSize
@@ -506,16 +592,16 @@ namespace BeatTogether.LiteNetLib
                         //ProcessReceiveFrom(_receiveEventArg);
                         //}
                         //if (!Socket.ReceiveFromAsync(_receiveEventArg))
-                    }
-                    Thread.Yield();
+                    //}
+                    //Thread.Yield();
                 }
                 _receiving = false;
-            }
-            catch (ObjectDisposedException) { }
-            catch (SocketException ex)
-            {
-                ProcessError(ex);
-            }
+            //}
+            //catch (ObjectDisposedException) { }
+            //catch (SocketException ex)
+            //{
+            //    ProcessError(ex);
+            //}
         }
 
         /// <summary>
@@ -529,8 +615,8 @@ namespace BeatTogether.LiteNetLib
             if (!IsStarted)
                 return;
 
-            try
-            {
+            //try
+            //{
                 _sending = true;
                 var remoteEndPoint = _sendEndpoint as IPEndPoint;
                 // Async write with the write handler
@@ -590,13 +676,13 @@ namespace BeatTogether.LiteNetLib
                 _sending = false;
                 //_logger.Verbose($"Sent {result}");
                 OnSent(_sendEndpoint, result);
-            }
-            catch (SocketException ex)
-            {
-                ProcessError(ex);
-                SendError(ex.SocketErrorCode);
-            }
-            catch (ObjectDisposedException) { }
+            //}
+            //catch (SocketException ex)
+            //{
+            //    ProcessError(ex);
+            //    SendError(ex.SocketErrorCode);
+            //}
+            //catch (ObjectDisposedException) { }
         }
 
         /// <summary>
