@@ -272,7 +272,8 @@ namespace BeatTogether.LiteNetLib
             IsStarted = false;
 
             // Update sending/receiving flags
-            _receiving = false;
+            //_receiving = false;
+            _receivingSem.Dispose();
             _sending = false;
 
             // Clear send/receive buffers
@@ -306,6 +307,7 @@ namespace BeatTogether.LiteNetLib
         EndPoint _sendEndpoint;
         // Receive buffer
         private bool _receiving;
+        private SemaphoreSlim _receivingSem = new(1);
         private Buffer _receiveBuffer;
         private SocketAsyncEventArgs _receiveEventArg;
         // Send buffer
@@ -442,9 +444,9 @@ namespace BeatTogether.LiteNetLib
             Task.Factory.StartNew(TryReceive);
         }
 
-        private void NativeReceive(object state)
+        private async void NativeReceive(object state)
         {
-            if (_receiving)
+            if (_receivingSem.CurrentCount <= 0)
                 return;
 
             if (!IsStarted)
@@ -452,10 +454,11 @@ namespace BeatTogether.LiteNetLib
 
             //try
             //{
-                _receiving = true;
+                //_receiving = true;
                 Socket socket = (Socket)state;
                 while (IsStarted)
                 {
+                    await _receivingSem.WaitAsync();
                     //if (Socket.Available > 0)
                     //{
                         //IntPtr socketHandle = socket.Handle;
@@ -505,6 +508,7 @@ namespace BeatTogether.LiteNetLib
                         //_receiveEventArg.RemoteEndPoint = endPoint;
                         //_receiveEventArg.SetBuffer(_receiveBuffer.Data, 0, (int)_receiveBuffer.Capacity);
                         _receiveEndpoint = endPoint;
+                        _receivingSem.Release();
                         OnReceived(_receiveEndpoint, _receiveBuffer.Data.AsSpan(0, (int)size));
                         //ProcessReceiveFrom(_receiveEventArg);
                         //}
@@ -512,7 +516,7 @@ namespace BeatTogether.LiteNetLib
                     //}
                     //Thread.Yield();
                 }
-                _receiving = false;
+                //_receiving = false;
             //}
             //catch (ObjectDisposedException) { }
             //catch (SocketException ex)
