@@ -1,3 +1,4 @@
+using AsyncUdp;
 using BeatTogether.LiteNetLib.Abstractions;
 using BeatTogether.LiteNetLib.Configuration;
 using BeatTogether.LiteNetLib.Enums;
@@ -24,6 +25,9 @@ namespace BeatTogether.LiteNetLib.Dispatchers
         private readonly LiteNetConfiguration _configuration;
         private readonly LiteNetServer _server;
 
+        private readonly ResizeableBufferPool _SendBuffers;
+
+
         public ConnectedMessageDispatcher(
             LiteNetConfiguration configuration,
             LiteNetServer server)
@@ -31,6 +35,7 @@ namespace BeatTogether.LiteNetLib.Dispatchers
             _configuration = configuration;
             _server = server;
 
+            _SendBuffers = new ResizeableBufferPool(_configuration.MaxPacketSize, 100);
             _server.ClientDisconnectEvent += HandleDisconnect;
         }
 
@@ -82,8 +87,8 @@ namespace BeatTogether.LiteNetLib.Dispatchers
                 .GetOrAdd(channelId, _ => new(_configuration.WindowSize, _configuration.MaxSequence));
             await window.Enqueue(out int queueIndex);
             int MessageLength = fragmented ? message.Length + FragmentedHeaderSize : message.Length + ChanneledHeaderSize;
-            MemoryBuffer FullMessage = new(GC.AllocateArray<byte>(MessageLength, pinned: true), false);
-
+            _SendBuffers.GetMemoryBuffer(out var SendBuffer, out int BufferOffset);
+            MemoryBuffer FullMessage = new(SendBuffer, false);
             WriteHeader(new ChanneledHeader
             {
                 IsFragmented = fragmented,
@@ -101,16 +106,17 @@ namespace BeatTogether.LiteNetLib.Dispatchers
             while (_configuration.MaximumReliableRetries < 0 || retryCount++ < _configuration.MaximumReliableRetries) 
             {
                 if (!_channelWindows.TryGetValue(endPoint, out var channels) || !channels.TryGetValue(channelId, out _))
-                    return; // Channel destroyed, stop sending
+                    break; // Channel destroyed, stop sending
 
                 if (ackTask.IsCompleted)
-                    return;
+                    break;
                 await _server.SendAsync(endPoint, FullMessage.Data);
                 await Task.WhenAny(
                     ackTask,
                     Task.Delay(_configuration.ReliableRetryDelay)
                 );
             }
+            _SendBuffers.ReturnBuffer(BufferOffset);
         }
         /// <summary>
         /// Expects the incomming MemoryBuffer to the exact length of the message to be sent
@@ -139,19 +145,20 @@ namespace BeatTogether.LiteNetLib.Dispatchers
             _server.SendSerial(endPoint, bufferWriter.Data);
             return Task.CompletedTask;
         }
-        private Task SendChanneled(EndPoint endPoint, ReadOnlyMemory<byte> message, byte channelId, int sequence)
+        private async Task SendChanneled(EndPoint endPoint, ReadOnlyMemory<byte> message, byte channelId, int sequence)
         {
             if (message.Length > _configuration.MaxPacketSize)
                 throw new Exception();
-            var bufferWriter = new MemoryBuffer(GC.AllocateArray<byte>(message.Length + ChanneledHeaderSize, pinned: true));
+            _SendBuffers.GetMemoryBuffer(out var SendBuffer, out int BufferOffset);
+            var bufferWriter = new MemoryBuffer(SendBuffer);
             new ChanneledHeader
             {
                 ChannelId = channelId,
                 Sequence = (ushort)sequence
             }.WriteTo(ref bufferWriter);
             bufferWriter.WriteBytes(message.Span);
-            _ = _server.SendAsync(endPoint, bufferWriter.Data);
-            return Task.CompletedTask;
+            await _server.SendAsync(endPoint, bufferWriter.Data);
+            _SendBuffers.ReturnBuffer(BufferOffset);
         }
 
         UnreliableHeader unreliableHeader = new UnreliableHeader();
@@ -166,15 +173,16 @@ namespace BeatTogether.LiteNetLib.Dispatchers
             return Task.CompletedTask;
         }
 
-        private Task SendUnreliable(EndPoint endPoint, ReadOnlyMemory<byte> message) //The serial method works well without triggering the garbage collector constantly, this does but allows for more to be sent though the socket
+        private async Task SendUnreliable(EndPoint endPoint, ReadOnlyMemory<byte> message)
         {
             if (message.Length > _configuration.MaxPacketSize)
                 throw new Exception();
-            var bufferWriter = new MemoryBuffer(GC.AllocateArray<byte>(message.Length + 1, pinned: true), false);
+            _SendBuffers.GetMemoryBuffer(out var SendBuffer, out int BufferOffset);
+            var bufferWriter = new MemoryBuffer(SendBuffer, false);
             unreliableHeader.WriteTo(ref bufferWriter);
             bufferWriter.WriteBytes(message.Span);
-            _ = _server.SendAsync(endPoint, bufferWriter.Data);
-            return Task.CompletedTask;
+            await _server.SendAsync(endPoint, bufferWriter.Data);
+            _SendBuffers.ReturnBuffer(BufferOffset);
         }
 
         /// <summary>

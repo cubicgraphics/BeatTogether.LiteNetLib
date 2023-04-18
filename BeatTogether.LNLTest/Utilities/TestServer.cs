@@ -3,7 +3,6 @@ using BeatTogether.LiteNetLib;
 using BeatTogether.LiteNetLib.Configuration;
 using BeatTogether.LiteNetLib.Enums;
 using BeatTogether.LiteNetLib.Util;
-using Krypton.Buffers;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 

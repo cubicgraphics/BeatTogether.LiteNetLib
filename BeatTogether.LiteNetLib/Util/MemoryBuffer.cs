@@ -21,7 +21,7 @@ namespace BeatTogether.LiteNetLib.Util
         public int RemainingSize => _buffer.Length - _offset;
         public ReadOnlyMemory<byte> ReadOnlyRemainingData => _buffer.Slice(_offset);
         public Memory<byte> RemainingData => _buffer.Slice(_offset);
-
+        public Memory<byte> GetFullBuffer() => _buffer;
         public MemoryBuffer(Memory<byte> buffer, bool resize = true)
         {
             _resize = resize;

@@ -11,7 +11,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using AsyncUdp;
 using BeatTogether.LiteNetLib.Util;
-using System.Buffers;
 
 namespace BeatTogether.LiteNetLib
 {
@@ -30,18 +29,21 @@ namespace BeatTogether.LiteNetLib
         private readonly IServiceProvider _serviceProvider;
         private readonly IPacketLayer? _packetLayer;
 
+        private readonly ResizeableBufferPool _PacketProcessingBuffers;
+
         public LiteNetServer(
             IPEndPoint endPoint,
             LiteNetConfiguration configuration,
             LiteNetPacketRegistry packetRegistry,
             IServiceProvider serviceProvider,
             IPacketLayer? packetLayer = null)
-            : base(endPoint, configuration.RecieveAsync, configuration.MaxHandlesWhileRecieving)
+            : base(endPoint, configuration.RecieveAsync, configuration.MaxHandlesWhileRecieving, 8192)
         {
             _configuration = configuration;
             _packetRegistry = packetRegistry;
             _serviceProvider = serviceProvider;
             _packetLayer = packetLayer;
+            _PacketProcessingBuffers = new(8192, 100);
         }
 
         public LiteNetServer(
@@ -52,18 +54,21 @@ namespace BeatTogether.LiteNetLib
             bool RecvAsync,
             int AsyncCount,
             IPacketLayer? packetLayer = null)
-            : base(endPoint, RecvAsync, AsyncCount)
+            : base(endPoint, RecvAsync, AsyncCount, 8192)
         {
             _configuration = configuration;
             _packetRegistry = packetRegistry;
             _serviceProvider = serviceProvider;
             _packetLayer = packetLayer;
+            _PacketProcessingBuffers = new(_configuration.MaxPacketSize, 100);
         }
 
         protected override void OnReceived(EndPoint endPoint, Memory<byte> buffer)
         {
             if (_lastPacketTimes.ContainsKey(endPoint))
                 _lastPacketTimes[endPoint] = DateTime.UtcNow.Ticks;
+            if (buffer.Length > _configuration.MaxPacketSize)
+                return;
             ReceivePacket(endPoint, buffer);
         }
 
@@ -71,11 +76,15 @@ namespace BeatTogether.LiteNetLib
         {
             if (_packetLayer != null)
             {
-                Memory<byte> IncommingData = new(buffer.ToArray());
-                _packetLayer.ProcessInboundPacket(endPoint, ref IncommingData);
-                buffer = IncommingData;
+                _PacketProcessingBuffers.GetMemoryBuffer(out var ProcessingBuffer, out var BufferOffset);
+                buffer.CopyTo(ProcessingBuffer);
+                _packetLayer.ProcessInboundPacket(endPoint, ref ProcessingBuffer);
+                HandlePacket(endPoint, ProcessingBuffer);
+                _PacketProcessingBuffers.ReturnBuffer(BufferOffset);
+                return;
             }
             HandlePacket(endPoint, buffer);
+            return;
         }
 
         internal protected virtual void HandlePacket(EndPoint endPoint, Memory<byte> buffer)
@@ -104,9 +113,12 @@ namespace BeatTogether.LiteNetLib
         {
             if (_packetLayer != null)
             {
-                Memory<byte> OutBuffer = new(buffer.ToArray());
-                _packetLayer.ProcessOutBoundPacket(endPoint, ref OutBuffer);
-                buffer = OutBuffer;
+                _PacketProcessingBuffers.GetMemoryBuffer(out var ProcessingBuffer, out var BufferOffset);
+                buffer.CopyTo(ProcessingBuffer);
+                _packetLayer.ProcessOutBoundPacket(endPoint, ref ProcessingBuffer);
+                await base.SendAsync(endPoint, ProcessingBuffer);
+                _PacketProcessingBuffers.ReturnBuffer(BufferOffset);
+                return;
             }
             await base.SendAsync(endPoint, buffer);
         }
@@ -115,9 +127,12 @@ namespace BeatTogether.LiteNetLib
         {
             if (_packetLayer != null)
             {
-                Span<byte> OutData = new(buffer.ToArray());
-                _packetLayer.ProcessOutBoundPacket(endPoint, ref OutData);
-                buffer = OutData;
+                _PacketProcessingBuffers.GetSpanBuffer(out var ProcessingBuffer, out var BufferOffset);
+                buffer.CopyTo(ProcessingBuffer);
+                _packetLayer.ProcessOutBoundPacket(endPoint, ref ProcessingBuffer);
+                base.SendSerial(endPoint, ProcessingBuffer);
+                _PacketProcessingBuffers.ReturnBuffer(BufferOffset);
+                return;
             }
             base.SendSerial(endPoint, buffer);
         }
