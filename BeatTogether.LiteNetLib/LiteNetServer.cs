@@ -78,6 +78,7 @@ namespace BeatTogether.LiteNetLib
             {
                 _PacketProcessingBuffers.GetMemoryBuffer(out var ProcessingBuffer, out var BufferOffset);
                 buffer.CopyTo(ProcessingBuffer);
+                ProcessingBuffer = ProcessingBuffer.Slice(0, buffer.Length);
                 _packetLayer.ProcessInboundPacket(endPoint, ref ProcessingBuffer);
                 HandlePacket(endPoint, ProcessingBuffer);
                 _PacketProcessingBuffers.ReturnBuffer(BufferOffset);
@@ -115,6 +116,7 @@ namespace BeatTogether.LiteNetLib
             {
                 _PacketProcessingBuffers.GetMemoryBuffer(out var ProcessingBuffer, out var BufferOffset);
                 buffer.CopyTo(ProcessingBuffer);
+                ProcessingBuffer = ProcessingBuffer.Slice(0, buffer.Length);
                 _packetLayer.ProcessOutBoundPacket(endPoint, ref ProcessingBuffer);
                 await base.SendAsync(endPoint, ProcessingBuffer);
                 _PacketProcessingBuffers.ReturnBuffer(BufferOffset);
@@ -129,6 +131,7 @@ namespace BeatTogether.LiteNetLib
             {
                 _PacketProcessingBuffers.GetSpanBuffer(out var ProcessingBuffer, out var BufferOffset);
                 buffer.CopyTo(ProcessingBuffer);
+                ProcessingBuffer = ProcessingBuffer.Slice(0, buffer.Length);
                 _packetLayer.ProcessOutBoundPacket(endPoint, ref ProcessingBuffer);
                 base.SendSerial(endPoint, ProcessingBuffer);
                 _PacketProcessingBuffers.ReturnBuffer(BufferOffset);
