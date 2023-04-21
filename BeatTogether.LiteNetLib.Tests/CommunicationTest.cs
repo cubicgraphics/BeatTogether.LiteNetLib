@@ -156,7 +156,7 @@ namespace BeatTogether.LiteNetLib.Tests
 
             _server.ClientConnectEvent += endPoint =>
             {
-                _messageDispatcher.Send(endPoint, MakeTest(testSize, test).AsSpan(), Enums.DeliveryMethod.ReliableOrdered);
+                _messageDispatcher.Send(endPoint, new Span<byte>(MakeTest(testSize, test)), Enums.DeliveryMethod.ReliableOrdered);
                 msgDelivered = true;
             };
             _clientNetListener.NetworkReceiveEvent += (endPoint, data, method) =>
@@ -228,12 +228,14 @@ namespace BeatTogether.LiteNetLib.Tests
 
             _server.ClientConnectEvent += endPoint =>
             {
-                _messageDispatcher.Send(endPoint, MakeTest(testSize, test).AsSpan(), Enums.DeliveryMethod.ReliableOrdered);
+                _messageDispatcher.Send(endPoint, new Span<byte>(MakeTest(testSize, test)), Enums.DeliveryMethod.ReliableOrdered);
                 msgDelivered = true;
             };
             _clientNetListener.NetworkReceiveEvent += (endPoint, data, method) =>
             {
                 // 4 is the size of the channeled message header
+                // 6 is the size of the fragmented message header
+                // 6 + 4 = 10 is total size for fragmented packets
                 Assert.AreEqual(testSize, data.UserDataSize);
                 AssertTest(test, data.RawData, data.UserDataOffset);
                 msgReceived = true;

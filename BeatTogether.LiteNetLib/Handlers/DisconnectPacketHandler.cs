@@ -19,9 +19,8 @@ namespace BeatTogether.LiteNetLib.Handlers
 
         public override Task Handle(EndPoint endPoint, DisconnectHeader packet, ref MemoryBuffer reader)
         {
-            _server.Send(endPoint, new ShutdownOkHeader());
             _server.HandleDisconnect(endPoint, DisconnectReason.RemoteConnectionClose);
-            return Task.CompletedTask;
+            return _server.Send(endPoint, new ShutdownOkHeader());
         }
     }
 }

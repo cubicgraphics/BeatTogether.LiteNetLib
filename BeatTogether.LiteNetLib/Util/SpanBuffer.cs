@@ -34,7 +34,10 @@ namespace BeatTogether.LiteNetLib.Util
             _buffer = new byte[size].AsSpan();
             _offset = 0;
         }
-
+        public void SetOffset(int NewOffset)
+        {
+            _offset = NewOffset;
+        }
 
         #region Writing To buffer
 

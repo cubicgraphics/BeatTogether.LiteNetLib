@@ -3,7 +3,6 @@ using BeatTogether.LiteNetLib.Configuration;
 using BeatTogether.LiteNetLib.Dispatchers;
 using BeatTogether.LiteNetLib.Headers;
 using BeatTogether.LiteNetLib.Util;
-using Krypton.Buffers;
 using System.Net;
 using System.Threading.Tasks;
 

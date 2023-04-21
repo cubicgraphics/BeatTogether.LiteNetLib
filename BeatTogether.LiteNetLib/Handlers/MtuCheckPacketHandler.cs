@@ -19,13 +19,12 @@ namespace BeatTogether.LiteNetLib.Handlers
         public override Task Handle(EndPoint endPoint, MtuCheckHeader packet, ref MemoryBuffer reader)
         {
             // Normally would check mtu - dont care lol, send back 'ok'
-            _server.Send(endPoint, new MtuOkHeader
+            return _server.Send(endPoint, new MtuOkHeader
             {
                 Mtu = packet.Mtu,
                 PadSize = packet.PadSize,
                 CheckEnd = packet.CheckEnd
             });
-            return Task.CompletedTask;
         }
     }
 }

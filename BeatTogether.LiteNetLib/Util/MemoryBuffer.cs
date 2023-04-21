@@ -7,7 +7,7 @@ using Krypton.Buffers;
 
 namespace BeatTogether.LiteNetLib.Util
 {
-    public class MemoryBuffer
+    public struct MemoryBuffer
     {
         private readonly bool _resize;
 
@@ -36,6 +36,10 @@ namespace BeatTogether.LiteNetLib.Util
             _offset = 0;
         }
 
+        public void SetOffset(int NewOffset)
+        {
+            _offset = NewOffset;
+        }
 
         #region Writing To buffer
 

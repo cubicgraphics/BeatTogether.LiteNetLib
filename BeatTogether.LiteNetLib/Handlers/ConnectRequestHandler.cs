@@ -28,8 +28,7 @@ namespace BeatTogether.LiteNetLib.Handlers
             if (packet.ProtocolId != ProtocolId)
             {
                 _logger.LogWarning($"Invalid protocol from '{endPoint}'. (ProtocolId={packet.ProtocolId} Expected={ProtocolId})");
-                _server.SendAsync(endPoint, new InvalidProtocolHeader());
-                return Task.CompletedTask;
+                return _server.Send(endPoint, new InvalidProtocolHeader()); ;
             }
 
             // TODO: There is some extra logic here in litenetlib that may be needed (NetManager.ProcessConnectRequest)
@@ -38,22 +37,20 @@ namespace BeatTogether.LiteNetLib.Handlers
             if (alreadyExists || _server.ShouldAcceptConnection(endPoint, ref reader))
             {
                 _logger.LogTrace($"Accepting request from {endPoint}");
-                _server.SendAsync(endPoint, new ConnectAcceptHeader
+                if (!alreadyExists)
+                    _server.HandleConnect(endPoint, packet.ConnectionTime);
+                return _server.Send(endPoint, new ConnectAcceptHeader
                 {
                     ConnectTime = packet.ConnectionTime,
                     RequestConnectionNumber = packet.ConnectionNumber,
                     IsReusedPeer = false // TODO: implement 'peer' reusing (probably not necessary)
                 });
-                if (!alreadyExists)
-                    _server.HandleConnect(endPoint, packet.ConnectionTime);
-                return Task.CompletedTask;
             }
             _logger.LogTrace($"Rejecting request from {endPoint}");
-            _server.SendAsync(endPoint, new DisconnectHeader
+            return _server.Send(endPoint, new DisconnectHeader
             {
                 ConnectionTime = packet.ConnectionTime
             });
-            return Task.CompletedTask;
         }
     }
 }
