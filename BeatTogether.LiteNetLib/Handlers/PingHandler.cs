@@ -19,11 +19,12 @@ namespace BeatTogether.LiteNetLib.Handlers
 
         public override Task Handle(EndPoint endPoint, PingHeader packet, ref MemoryBuffer reader)
         {
-            return _server.Send(endPoint, new PongHeader
+            _server.Send(endPoint, new PongHeader
             {
                 Sequence = packet.Sequence,
                 Time = DateTime.UtcNow.Ticks
             });
+            return Task.CompletedTask;
         }
     }
 }
